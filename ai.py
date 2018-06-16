@@ -1,7 +1,4 @@
-# AI for Self Driving Car
-
-# Importing the libraries
-
+#We are only making the AI to select the right action at the right time
 import numpy as np
 import random
 import os
@@ -12,96 +9,101 @@ import torch.optim as optim
 import torch.autograd as autograd
 from torch.autograd import Variable
 
-# Creating the architecture of the Neural Network
-
 class Network(nn.Module):
+    #TODO: PLay with the architecture of the neural network. 
+    #Perhaps make this comfigureable by making inputs to this class
     
     def __init__(self, input_size, nb_action):
-        super(Network, self).__init__()
+        super(Network, self).__init__() 
+        #this variable is the number of input neurons
         self.input_size = input_size
+        #variable for the number of output neurons
         self.nb_action = nb_action
+        #full connections between layers. All th neurons of the hidden layer
+        #be connected to all the connnections of the input layer
         self.fc1 = nn.Linear(input_size, 30)
-        self.fc2 = nn.Linear(30, nb_action)
-    
+        self.fc2 = nn.Linear(30, nb_action)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
+         
+
+
+
+    #the function that perfroms the forward propogation
     def forward(self, state):
+        #hidden neurons
+        #We use the rectofier activation function, to activate the hidden layer
         x = F.relu(self.fc1(state))
+        
+        #return the output neurons, which are the actions (the q_values more specifically)
         q_values = self.fc2(x)
         return q_values
 
-# Implementing Experience Replay
 
+#This class is for implementing experience replay
 class ReplayMemory(object):
     
+    #constructor
     def __init__(self, capacity):
+        
+        #the maximum number of transitions we have saved of events
         self.capacity = capacity
+        #contain the last 'n' number of events
         self.memory = []
-    
+    #append a new event/transition in the memory
     def push(self, event):
         self.memory.append(event)
+        
+        #make sure we dont exceed the number of saved transitions
         if len(self.memory) > self.capacity:
             del self.memory[0]
-    
+            
+            
+    #return a randon sample from our memory 
     def sample(self, batch_size):
+        #taking random samples of the memory that are of size 'batch_size'
+        #if list = ((1, 2, 3)(4, 5, 6)) -> zip(*list) = ((1, 4), (2, 3), (5,6))
+        #our data format for this problem is ((states), (actions), (rewards))
         samples = zip(*random.sample(self.memory, batch_size))
+        #We have to concatinate the samples above with regards to the first dimension, states.
+        #We do this for alignment, so that we are getting a list of batches such that each
+        #state, action, and reward batch corrasponds to the same time 't', with each formatted 
+        #into a PyTorch variable.
         return map(lambda x: Variable(torch.cat(x, 0)), samples)
-
-# Implementing Deep Q Learning
-
-class Dqn():
     
+
+#now we implement the deep Q-Learning model
+class Dqn():
     def __init__(self, input_size, nb_action, gamma):
         self.gamma = gamma
-        self.reward_window = []
+        
+        #will be be a revolving window of the last 'n' rewards, as a running average.
+        self.reward_windsows = []
+        
+        #the neural network
         self.model = Network(input_size, nb_action)
+        
+        #create the memory for experiance replay
         self.memory = ReplayMemory(100000)
+        
+        #optimizer provided by torch to perform stochastic gradient decent backpropogation
+        #TODO: Make adjustable learning rate
         self.optimizer = optim.Adam(self.model.parameters(), lr = 0.001)
+        
+        #Specifying the number of elements in the last state
         self.last_state = torch.Tensor(input_size).unsqueeze(0)
+        
+        #actions are either 0, 1, or 2. These map to the indexes of the rotation-angle array
         self.last_action = 0
+        
         self.last_reward = 0
-    
+        
+    #this is where we utilize the output of our neural network to generate an action
     def select_action(self, state):
-        probs = F.softmax(self.model(Variable(state, volatile = True))*100) # T=100
-        action = probs.multinomial()
-        return action.data[0,0]
-    
-    def learn(self, batch_state, batch_next_state, batch_reward, batch_action):
-        outputs = self.model(batch_state).gather(1, batch_action.unsqueeze(1)).squeeze(1)
-        next_outputs = self.model(batch_next_state).detach().max(1)[0]
-        target = self.gamma*next_outputs + batch_reward
-        td_loss = F.smooth_l1_loss(outputs, target)
-        self.optimizer.zero_grad()
-        td_loss.backward(retain_variables = True)
-        self.optimizer.step()
-    
-    def update(self, reward, new_signal):
-        new_state = torch.Tensor(new_signal).float().unsqueeze(0)
-        self.memory.push((self.last_state, new_state, torch.LongTensor([int(self.last_action)]), torch.Tensor([self.last_reward])))
-        action = self.select_action(new_state)
-        if len(self.memory.memory) > 100:
-            batch_state, batch_next_state, batch_action, batch_reward = self.memory.sample(100)
-            self.learn(batch_state, batch_next_state, batch_reward, batch_action)
-        self.last_action = action
-        self.last_state = new_state
-        self.last_reward = reward
-        self.reward_window.append(reward)
-        if len(self.reward_window) > 1000:
-            del self.reward_window[0]
-        return action
-    
-    def score(self):
-        return sum(self.reward_window)/(len(self.reward_window)+1.)
-    
-    def save(self):
-        torch.save({'state_dict': self.model.state_dict(),
-                    'optimizer' : self.optimizer.state_dict(),
-                   }, 'last_brain.pth')
-    
-    def load(self):
-        if os.path.isfile('last_brain.pth'):
-            print("=> loading checkpoint... ")
-            checkpoint = torch.load('last_brain.pth')
-            self.model.load_state_dict(checkpoint['state_dict'])
-            self.optimizer.load_state_dict(checkpoint['optimizer'])
-            print("done !")
-        else:
-            print("no checkpoint found...")
+        #Here we implement a softmax propability distribution instead of Argmax as in the typical inplementation of the Q-Learning Algorithm 
+        #We assign a high probability to  the highest Q-Value action available, but give a tempurature for other 
+        #action's which will decrease over time. THe higher the tempurature at the start will allow for randomly 
+        #selected action's to actually be utilized. Over time, the temperature will decrease based of a tempurature  equation
+        
+        #TODO: Variable class has been depreciated. Reimplement with Tensor constructor.
+        #TODO: Allow for configuration of Softmax tempurature param
+        probs = F.softmax(self.model(Variable(state, volatile = True)) * 7) 
+
