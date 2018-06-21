@@ -76,7 +76,7 @@ class Dqn():
         self.gamma = gamma
         
         #will be be a revolving window of the last 'n' rewards, as a running average.
-        self.reward_windsows = []
+        self.reward_window = []
         
         #the neural network
         self.model = Network(input_size, nb_action)
@@ -116,7 +116,7 @@ class Dqn():
     #Here is where the training of the DQN will actually occur. Forward and backpropogation with stochastic gradient descent
     #will be inplemented to determin the relative affect of all our weights for each node. 
     #Q(s_t, a_t) == Q(s_t, a_t) + alpha[r_(t+1) + gamma * {MAX_a Q(s_(t+1), a)} - Q(s_t, a_t)]
-    def learn(self, batch_state, batch_next_state, batch_reward, batch_reward):
+    def learn(self, batch_state, batch_next_state, batch_reward, batch_action):
         
         #Our network is expecting a batch of states. Then we gather together all the sected best actions from the NN
         outputs = self.model(batch_state).gather(1, batch_action.unsqueeze(0)).squeeze(1)
@@ -138,9 +138,61 @@ class Dqn():
         #backpropogate
         td_loss.backward(retain_variables = True)
         
-        #update weights based on contribution to error. long Derivatives make easy.
+        #update weights based on contribution to error. long Derivatives made easy.
         self.optimizer.step()
+    
+    
+    def update(self, reward, new_signal): 
         
+        #We got to convert our simple array of environment variables, and then turn into a torch tensor
+        new_state = torch.Tensor(new_signal).float().unsqueeze(0)
+        
+        #We have a brand new transition, so update the memory
+        self.memory.push((self.last_state, new_state, torch.LongTensor([int(self.last_action)]), torch.Tensor([self.last_reward])))
+        
+        #We need to play an action
+        action = self.select_action(new_state)
+        
+        #Allow the NN to learn from random samples of transitions
+        if len(self.memory.memory) > 100:
+            batch_state, batch_next_state, batch_reward, batch_action = self.memory.sample(100)
+            self.learn(batch_state, batch_next_state, batch_reward, batch_action)
+            
+        
+        self.last_action = action
+        self.last_state = new_state
+        self.last_reward = reward
+        
+        #update the reward window, to show the evolving mean of rewards
+        self.reward_window.append(reward)
+        if len(self.reward_window) > 1000:
+            #delete the oldest entry
+            del self.reward_window[0]
+        
+        return action
+    
+    #mean of the reward in the sliding window
+    def score(self):
+        return sum(self.reward_window)/(len(self.reward_window) + 1.)
+    
+    #Saves the NN
+    def save(self):
+        
+        #we will save our model and the optimizer to a file named 'last_brain.pth'
+        torch.save({ 'state_dict': self.model.state_dict(), 'optimizer' : self.optimizer.state_dict }, 'last_brain.pth' )
+    
+    #load saved NN
+    def load(self):
+        
+        if os.path.isfile('last_brain.pth'):
+            print('=> loading checkpoint...')
+            checkpoint = torch.load('last_brain.pth')
+            self.model.load_state_dict(checkpoint['state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer'])
+            print("Done!")
+        else:
+            print('No model and optimizer found...')
+            
         
         
         
