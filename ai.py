@@ -11,7 +11,7 @@ from torch.autograd import Variable
 
 class Network(nn.Module):
     #TODO: PLay with the architecture of the neural network. 
-    #Perhaps make this comfigureable by making inputs to this class
+    #Perhaps make this configureable by making inputs to this class
     
     def __init__(self, input_size, nb_action):
         super(Network, self).__init__() 
@@ -88,7 +88,8 @@ class Dqn():
         #TODO: Make adjustable learning rate
         self.optimizer = optim.Adam(self.model.parameters(), lr = 0.001)
         
-        #Specifying the number of elements in the last state
+        #Creates the batch structure of states. Essentially, the NN requires we place into it a batch of states. 
+        #So the data structure will resemble a tuple: (0, (state dimentions....))
         self.last_state = torch.Tensor(input_size).unsqueeze(0)
         
         #actions are either 0, 1, or 2. These map to the indexes of the rotation-angle array
@@ -106,4 +107,44 @@ class Dqn():
         #TODO: Variable class has been depreciated. Reimplement with Tensor constructor.
         #TODO: Allow for configuration of Softmax tempurature param
         probs = F.softmax(self.model(Variable(state, volatile = True)) * 7) 
+        
+        #random selction from our probability distribution
+        action = probs.multinomial()
+        
+        return action.data[0, 0]
+    
+    #Here is where the training of the DQN will actually occur. Forward and backpropogation with stochastic gradient descent
+    #will be inplemented to determin the relative affect of all our weights for each node. 
+    #Q(s_t, a_t) == Q(s_t, a_t) + alpha[r_(t+1) + gamma * {MAX_a Q(s_(t+1), a)} - Q(s_t, a_t)]
+    def learn(self, batch_state, batch_next_state, batch_reward, batch_reward):
+        
+        #Our network is expecting a batch of states. Then we gather together all the sected best actions from the NN
+        outputs = self.model(batch_state).gather(1, batch_action.unsqueeze(0)).squeeze(1)
+        
+        #We take the maximum of the next state's Q-Vsalues with respect to the next states actions,
+        #where actions are stored in index 1 and states stored in index 0
+        next_outputs = self.model(batch_next_state).detact().max(1)[0]
+        
+        #r_(t+1) + gamma * {MAX_a Q(s_(t+1), a)} - Q(s_t, a_t)
+        #Target in one sample in memory
+        target = self.gamma*next_outputs + batch_reward
+        
+        #Huber loss error function
+        td_loss = F.smooth_l1_loss(outputs, target)
+        
+        #here we will take the loss to perfrom back propogation on our weights with the optimizaer functions
+        self.optimizer.zero_grad();
+        
+        #backpropogate
+        td_loss.backward(retain_variables = True)
+        
+        #update weights based on contribution to error. long Derivatives make easy.
+        self.optimizer.step()
+        
+        
+        
+        
+    
+        
+        
 
